@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package proto;
+
+//用户会发送两种message给同一个服务器，一种是解数独返回结果，另一种是echo服务
+//这需要dispacher功能,请求不同的服务来计算
+message shudu_data{
+	string data=1;
+	string time=2;
+}
+
+//有不同的message，上面的是数度的，这个是echo的，对应不同的服务。
+//但是程序只能通过传输数据的头部得到name，这就需要反射功能获取对应的message容器。
+message echo_data{
+	string data=1;
+}
