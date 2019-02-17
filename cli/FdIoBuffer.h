@@ -6,6 +6,7 @@
 //#include <vector>
 #include <string>
 #include <stdint.h>
+//#include "EventThread.h"
 
 #define BUFSIZE 512
 #define MAX_EMPTY_LEN 512
@@ -21,10 +22,10 @@
 class FdIoBuffer:boost::noncopyable
 {
 public:
-	FdIoBuffer();
+	explicit FdIoBuffer();
 	~FdIoBuffer();
 
-	int ReadFd(int fd);//从fd中读取已到达的所有数据放入自带的buf中。同时具备扩容功能，保证能容纳所有数据。
+	int ReadFd(int &fd);//从fd中读取已到达的所有数据放入自带的buf中。同时具备扩容功能，保证能容纳所有数据。
 	int BufDataSize();//返回buf目前所有数据量
 	void MoveReadPtr(int len);//因为数据的序列化和反序列化由protobuf负责，所以buffer只需要移动读指针就可以了
 	//void MoveWritePtr(int len);
