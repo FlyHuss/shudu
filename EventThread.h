@@ -7,10 +7,11 @@
 #include <unordered_map>
 #include "shudu.pb.h"
 #include <queue>
-#include "FdIoBuffer.h"
 #include "ThreadPoll.h"
 #include "SolveServer.h"
 #include "Dispacher.h"
+
+class FdIoBuffer;//前置声明
 
 #define INIT_THREAD_POLL_NUM 8
 #define HEADER_LEN 4
@@ -28,8 +29,9 @@ public:
 
 	void Run();//启动该线程,内部是一个循环用来accept客户以及把客户fd加入epoll等待数据
 	void Stop();//stop以后就不能再Run了，而要重新运行程序
-	int FindMsgFd(std::shared_ptr<::google::protobuf::Message>);//由Message找到对应的fd
-	void DeleteMsgFd(std::shared_ptr<::google::protobuf::Message>);//关闭连接或异常情况，删除Message对应的fd
+	void SetMsgFd(std::shared_ptr<::google::protobuf::Message> msg_ptr,int fd);
+	int FindMsgFd(std::shared_ptr<::google::protobuf::Message> msg_ptr);//由Message找到对应的fd
+	void DeleteMsgFd(std::shared_ptr<::google::protobuf::Message> msg_ptr);//关闭连接或异常情况，删除Message对应的fd
 	FdIoBuffer *FindFdBuf(int fd);//由fd找到对应的buf
 	void DeleteFdBuf(int fd);//关闭连接或异常情况，删除fd对应的buf
 
@@ -37,7 +39,7 @@ public:
 private:
 	pthread_t io_thread;//io线程的线程号，回收时用
 	bool accept_looping,io_looping;//控制无限循环启动开始的标志
-	int connect_count;//小于等于int的基础类型修改在多线程下不用加锁的,这个是用来控制连接数的，好像没用上，功能没写
+	//int connect_count;//小于等于int的基础类型修改在多线程下不用加锁的,这个是用来控制连接数的，好像没用上，功能没写
 
 	std::queue<int> cli_queue;//io线程取客户读任务的阻塞队列
 	MyMutexPre cli_queue_mutex;//自己封装的互斥量类
