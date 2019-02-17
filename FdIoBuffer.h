@@ -6,10 +6,12 @@
 //#include <vector>
 #include <string>
 #include <stdint.h>
+//#include "EventThread.h"
 
 #define BUFSIZE 512
 #define MAX_EMPTY_LEN 512
 
+class EventThread;//前置声明
 /*
 因为用户io可能数据只收到部分，不完整，而io线程使用的epoll管理所有的io fd ，所以不能只用一个buf来缓存数据，必须多个buf
 要么多个io线程，一个线程一个io buf;要么一个io线程，但是每个fd映射一个buf
