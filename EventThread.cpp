@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <string.h>
 #include <stdlib.h>
+#include "FdIoBuffer.h"
+#include <functional>
 
 /*
 EventThread类主要存放了几乎所有的数据，来使其他线程通过传入它的this指针共享这些数据。
@@ -18,7 +20,7 @@ EventThread类主要存放了几乎所有的数据，来使其他线程通过传
  */
 
 //构造函数
-EventThread::EventThread():accept_looping(false),io_looping(false),connect_count(0){
+EventThread::EventThread():accept_looping(false),io_looping(false){
 	cli_queue_event.SetRecordNum(true);//初始化自己的条件变量类。true表示是计数模式，即多个signal可以累加，wait的时候如果之前signal过就不会阻塞而是直接取
 };
 
@@ -28,10 +30,11 @@ void EventThread::Run(){
 	int r=pthread_create(&io_thread,NULL,io_thread_func,this);//在accept线程中先启动io线程
 	assert(r==0);
 	//注册实例化两个不同的处理函数
-	m_dispacher.RegisterCallback<proto::shudu_data>(std::bind(&m_solve_server::SolveShudu, &m_solve_server, std::placeholders::_1));
-	m_dispacher.RegisterCallback<proto::echo_data>(std::bind(&m_solve_server::SolveEcho, &m_solve_server, std::placeholders::_1));
+	m_dispacher.Init(this);
 	m_thread_poll.Init(&m_dispacher,this,INIT_THREAD_POLL_NUM);//初始化线程池
 	m_solve_server.Init(this);//初始化solve函数
+	m_dispacher.RegisterCallback<proto::shudu_data>(std::bind(&SolveServer::SolveShudu, &m_solve_server, std::placeholders::_1));
+	m_dispacher.RegisterCallback<proto::echo_data>(std::bind(&SolveServer::SolveEcho, &m_solve_server, std::placeholders::_1));
 
 	accept_looping=true;//线程启动的标志，最后用来设置停止无限循环退出
 
@@ -78,7 +81,7 @@ void EventThread::Run(){
 		for(int i=0;i<nfd;++i){
 			if(events[i].data.fd==listen_fd){//有客户连接的事件
 				cli_fd=accept(listen_fd,NULL,NULL);
-				connect_count++;
+				//connect_count++;
 				ev.data.fd = cli_fd;
     			ev.events = EPOLLIN|EPOLLET;
     			epoll_ctl(epfd, EPOLL_CTL_ADD, cli_fd, &ev);//新accept的客户fd加入epoll的读事件
@@ -88,7 +91,10 @@ void EventThread::Run(){
 				r=fcntl(cli_fd,F_SETFL,r|O_NONBLOCK);//客户的读事件也要设置成非阻塞
 				assert(r!=-1);
 
-    			cli_fd_bufs[cli_fd]=new FdIoBuffer(this);//给每个客户fd一个独立的接收缓存
+				{
+					MyMutex lock(cli_queue_mutex);//上锁
+    				cli_fd_bufs[cli_fd]=new FdIoBuffer(this);//给每个客户fd一个独立的接收缓存
+    			}
 			}
 			else{//已连接的客户发送数据过来了的事件
 				MyMutex lock(cli_queue_mutex);//上锁
@@ -107,23 +113,33 @@ void EventThread::Stop(){
 	pthread_join(io_thread,NULL);
 }
 
+//往对应的msg注册fd是io线程的事情，所以还是需要一个set函数存取私有数据
+void EventThread::SetMsgFd(std::shared_ptr<::google::protobuf::Message> msg_ptr,int fd){
+	MyMutex lock(cli_queue_mutex);//上锁
+	msg_fd[msg_ptr]=fd;
+}
+
 //由Message找到对应的fd，后面返回消息要用，关闭连接的清理也要用到
 int EventThread::FindMsgFd(std::shared_ptr<::google::protobuf::Message> msg_ptr){
+	MyMutex lock(cli_queue_mutex);//上锁
 	return msg_fd[msg_ptr];
 }
 
-//关闭连接或异常情况，删除Message对应的fd
-void DeleteMsgFd(std::shared_ptr<::google::protobuf::Message> msg_ptr){
+//删除Message对应的fd
+void EventThread::DeleteMsgFd(std::shared_ptr<::google::protobuf::Message> msg_ptr){
+	MyMutex lock(cli_queue_mutex);//上锁
 	msg_fd.erase(msg_ptr);
 }
 
 //由fd找到对应的buf
 FdIoBuffer *EventThread::FindFdBuf(int fd){
+	MyMutex lock(cli_queue_mutex);//上锁
 	return cli_fd_bufs[fd];
 }
 
 //关闭连接或异常情况，删除fd对应的buf
 void EventThread::DeleteFdBuf(int fd){
+	MyMutex lock(cli_queue_mutex);//上锁
 	cli_fd_bufs.erase(fd);
 }
 
@@ -178,7 +194,7 @@ void* EventThread::io_thread_func(void *context){
 					//从buf中反序列化数据
 					m_data_ptr->ParseFromArray(buf_ptr->GetDataPtr(),data_len);
 					buf_ptr->MoveReadPtr(data_len);
-					event_thread->m_thread_poll.msg_fd[m_data_ptr]=fd;//每个消息对应的fd。用来处理完关闭连接
+					event_thread->SetMsgFd(m_data_ptr,fd);//每个消息对应的fd。用来处理完关闭连接
 					//可以通过new出来的Message得到Descriptor，所以传入线程池的就是m_data_ptr，
 					//在里面再根据m_data_ptr获得Descriptor放入map得到处理函数，直接把m_data_ptr放入对应的处理函数即可
 					event_thread->m_thread_poll.Push(m_data_ptr);//把得到的数据和fd放入线程池计算，并由线程池send写回，关闭描述符由用户关闭连接控制。
