@@ -10,17 +10,18 @@
 #include "Dispacher.h"
 //#include "EventThread.h"
 
+class EventThread;//前置声明
+
 /*
 线程池，初始化若干个专门用来计算的线程，开始陷入沉睡，等待io线程送入数据进行唤醒处理。
 处理完了继续睡眠无限循环
  */
-
 class ThreadPoll:boost::noncopyable{
 public:
 	ThreadPoll();
 	~ThreadPoll(){};
-	void Init(void *context,int thread_num);
-	void Push(::google::protobuf::Message* msg);//外接函数，用来往任务队列加入任务
+	void Init(ProtoMessageDispacher * dispacher_ptr,EventThread *event_ptr,int thread_num);
+	void Push(std::shared_ptr<::google::protobuf::Message> msg);//外接函数，用来往任务队列加入任务
 
 	static void* ThreadPollFun(void *context);
 
