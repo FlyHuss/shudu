@@ -4,6 +4,8 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include "EventThread.h"
+#include <sys/epoll.h>
 
 FdIoBuffer::FdIoBuffer(EventThread *context):cur_buf_size(BUFSIZE),write_ptr(0),read_ptr(0),event_thread_ptr(context){
 	m_buf=(char *)malloc(sizeof(char)*BUFSIZE);
@@ -30,14 +32,20 @@ int FdIoBuffer::ReadFd(int &fd){
 		if(errno==EINTR){//被信号中断，继续
 			return ReadFd(fd);
 		}
+		std::cout<<"客户端异常终止！ fd= "<<fd<<std::endl;
+		event_thread_ptr->DeleteFdBuf(fd);
+		epoll_ctl(event_thread_ptr->epfd, EPOLL_CTL_DEL, fd, NULL);
+		close(fd);
+		fd=-1;
+		return -1;
 	}
 	//EPOLLET需要一直读到返回-1才算读完，
 	//如果内核缓存还有数据并且FIN（对端终止连接）紧跟着后面，则需要这里read返回0
 	//如果缓存没有数据，对端终止，这里也会检测到
 	if(n==0){
 		std::cout<<"客户端终止！ fd= "<<fd<<std::endl;
-		event_thread_ptr->cli_fd_bufs.erase(fd);
-		event_thread_ptr->connect_count--;
+		event_thread_ptr->DeleteFdBuf(fd);
+		//event_thread_ptr->connect_count--;
 		//std::unordered_map<int,FdIoBuffer *>::iterator iter=event_thread->cli_fd_bufs.find(fd);
 		epoll_ctl(event_thread_ptr->epfd, EPOLL_CTL_DEL, fd, NULL);
 		close(fd);
@@ -77,8 +85,9 @@ void FdIoBuffer::MoveReadPtr(int len){
 	
 	if(read_ptr>=MAX_EMPTY_LEN){//当buf前面的空白太多了，把后面的数据往前移动。
 		memcpy(m_buf,m_buf+read_ptr,BufDataSize());
+		int datalen=BufDataSize();
 		read_ptr=0;
-		write_ptr-=empty_len;
+		write_ptr=datalen;
 	}
 }
 
