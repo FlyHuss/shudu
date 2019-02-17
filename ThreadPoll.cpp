@@ -1,5 +1,7 @@
 #include "ThreadPoll.h"
+#include "EventThread.h"
 #include <assert.h>
+#include <iostream>
 
 ThreadPoll::ThreadPoll(){
 	msg_queue_event.SetRecordNum(true);
@@ -37,6 +39,7 @@ void* ThreadPoll::ThreadPollFun(void *context){
 			msg_data_ptr=thread_poll_ptr->msg_queue.front();//从任务队列去除io线程送过来的io数据准备处理
 			thread_poll_ptr->msg_queue.pop();
 		}
-		m_dispacher->FindAndUseDispacher(msg_data_ptr);//调用回调函数处理具体计算逻辑
+		thread_poll_ptr->m_dispacher->FindAndUseDispacher(msg_data_ptr);//调用回调函数处理具体计算逻辑
+		thread_poll_ptr->event_thread_ptr->DeleteMsgFd(msg_data_ptr);
 	}
 }
