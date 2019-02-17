@@ -2,13 +2,15 @@
 #include <string>
 #include <iostream>
 #include <arpa/inet.h>
+#include "EventThread.h"
 
 //数独任务的外部接口函数
-void SolveServer::SolveShudu(proto::shudu_data* msg_data){
+void SolveServer::SolveShudu(std::shared_ptr<proto::shudu_data> data_ptr){
 	//proto::shudu_data* data_ptr=(proto::shudu_data *)msg_data;
 	std::cout<<data_ptr->time()<<std::endl;//打印数据的time字符串
 	std::string *shudu_data=data_ptr->mutable_data();//返回data的非const
-	int fd=thread_poll_ptr->msg_fd[msg_data];//获取对应的fd，用来返回结果
+	//std::shared_ptr<::google::protobuf::Message> msg_ptr(data_ptr.get());
+	int fd=event_thread_ptr->FindMsgFd(data_ptr);//获取对应的fd，用来返回结果
 
 	time_t timep;
 	time(&timep);
@@ -19,11 +21,7 @@ void SolveServer::SolveShudu(proto::shudu_data* msg_data){
 		std::string buf;
 		data_ptr->SerializeToString(&buf);//原数据直接序列化到buf中发出
 		write(fd,&buf[0],buf.size());//发送
-		std::unordered_map<::google::protobuf::Message*,std::function<void(::google::protobuf::Message*)>>::iterator iter=thread_poll_ptr->msg_callback.find(msg_data);
-		thread_poll_ptr->msg_callback.erase(iter);
-		std::unordered_map<::google::protobuf::Message*,int>::iterator iter2=thread_poll_ptr->msg_fd.find(msg_data);
-		thread_poll_ptr->msg_fd.erase(iter2);
-		delete msg_data;
+		event_thread_ptr->DeleteMsgFd(data_ptr);
 		return ;
 	}
 	//正常数据情况
@@ -48,11 +46,7 @@ void SolveServer::SolveShudu(proto::shudu_data* msg_data){
         nwrite+=write(fd,&send_buf[nwrite],len-nwrite);
     }
 
-	std::unordered_map<::google::protobuf::Message*,std::function<void(::google::protobuf::Message*)>>::iterator iter=thread_poll_ptr->msg_callback.find(msg_data);
-	thread_poll_ptr->msg_callback.erase(iter);
-	std::unordered_map<::google::protobuf::Message*,int>::iterator iter2=thread_poll_ptr->msg_fd.find(msg_data);
-	thread_poll_ptr->msg_fd.erase(iter2);
-	delete msg_data;
+    //event_thread_ptr->DeleteMsgFd(data_ptr);
 }
 
 //求解数独的算法函数
@@ -89,9 +83,9 @@ bool SolveServer::IsValid( std::string &data, int i, int j ) {
 }
 
 //echo任务的外部接口函数,数据原样写回
-void SolveServer::SolveEcho(proto::echo_data* data_ptr){
+void SolveServer::SolveEcho(std::shared_ptr<proto::echo_data> data_ptr){
 	//proto::shudu_data* data_ptr=(proto::shudu_data *)msg_data;
-	
+	//std::shared_ptr<::google::protobuf::Message> msg_ptr(data_ptr.get());
 	std::string send_buf(8,0);
     std::string type_name=data_ptr->GetTypeName();
     uint32_t n=htonl(type_name.length()+1);
@@ -106,14 +100,10 @@ void SolveServer::SolveEcho(proto::echo_data* data_ptr){
     int len=send_buf.length();
     send_buf[pos]='\0';
     int nwrite=0;
-    int fd=thread_poll_ptr->msg_fd[msg_data];
+    int fd=event_thread_ptr->FindMsgFd(data_ptr);
     while(len!=nwrite){// send all
         nwrite+=write(fd,&send_buf[nwrite],len-nwrite);
     }
 
-	std::unordered_map<::google::protobuf::Message*,std::function<void(::google::protobuf::Message*)>>::iterator iter=thread_poll_ptr->msg_callback.find(msg_data);
-	thread_poll_ptr->msg_callback.erase(iter);
-	std::unordered_map<::google::protobuf::Message*,int>::iterator iter2=thread_poll_ptr->msg_fd.find(msg_data);
-	thread_poll_ptr->msg_fd.erase(iter2);
-	delete msg_data;
+	//event_thread_ptr->DeleteMsgFd(data_ptr);
 }
