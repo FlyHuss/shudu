@@ -1,22 +1,24 @@
 #ifndef SOLVESERVER_H_
 #define SOLVESERVER_H_
 
-#include "ThreadPoll.h"
+#include "shudu.pb.h"
+
+class EventThread;//前置声明
 /*
 该类内部放着各种业务处理函数，新增的业务也写在这
  */
 class SolveServer{
 public:
-	explicit void Init(ThreadPoll *context){
-		thread_poll_ptr=context;
+	void Init(EventThread *context){
+		event_thread_ptr=context;
 	};
 
-	void SolveShudu(proto::shudu_data* data);
+	void SolveShudu(std::shared_ptr<proto::shudu_data> data_ptr);
 	bool SolveShuduHelper(std::string &data, int i, int j);
 	bool IsValid( std::string &data, int i, int j );
-	void SolveEcho(proto::echo_data* data);
+	void SolveEcho(std::shared_ptr<proto::echo_data> data_ptr);
 private:
-	ThreadPoll *thread_poll_ptr;
+	EventThread *event_thread_ptr;
 };
 
 #endif
